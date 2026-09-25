@@ -8,7 +8,7 @@ import (
 
 const (
 	endpointDaily    = "https://daily-cloudcode-pa.googleapis.com"
-	userAgentVersion = "1.1.13"
+	userAgentVersion = "1.2.10"
 	RequestUserAgent = "antigravity"
 	RequestTypeAgent = "agent"
 )

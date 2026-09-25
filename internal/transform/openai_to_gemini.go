@@ -311,9 +311,17 @@ func convertMessagesToGeminiContents(messages []openai.Message) (geminiContents 
 					thoughtSignature = id[idx+1:]
 					id = id[:idx]
 				}
+				// Check in-memory signature cache by clean ID
+				if cachedSig := openai.GetThoughtSignature(id); cachedSig != "" {
+					thoughtSignature = cachedSig
+				}
+				// Explicit metadata takes precedence over legacy ID-embedded signatures
+				if tc.ExtraContent != nil && tc.ExtraContent.Google != nil && tc.ExtraContent.Google.ThoughtSignature != "" {
+					thoughtSignature = tc.ExtraContent.Google.ThoughtSignature
+				}
 
 				if thoughtSignature != "" {
-					logger.Get().Info().Str("signature", thoughtSignature).Msg("Restored thought_signature from client tool call ID")
+					logger.Get().Info().Str("call_id", id).Str("signature", thoughtSignature).Msg("Restored thought_signature from cache/metadata")
 				}
 
 				if tc.Function.Name != "" {

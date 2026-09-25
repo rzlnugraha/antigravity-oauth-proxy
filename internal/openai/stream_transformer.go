@@ -42,10 +42,19 @@ type NativeToolResponse struct {
 
 // OpenAIToolCall represents a tool call in OpenAI format
 type OpenAIToolCall struct {
-	Index    int                `json:"index"`
-	ID       string             `json:"id"`
-	Type     string             `json:"type"`
-	Function OpenAIFunctionCall `json:"function"`
+	Index        int                   `json:"index"`
+	ID           string                `json:"id"`
+	Type         string                `json:"type"`
+	Function     OpenAIFunctionCall    `json:"function"`
+	ExtraContent *ToolCallExtraContent `json:"extra_content,omitempty"`
+}
+
+type ToolCallExtraContent struct {
+	Google *GoogleToolCallMetadata `json:"google,omitempty"`
+}
+
+type GoogleToolCallMetadata struct {
+	ThoughtSignature string `json:"thought_signature,omitempty"`
 }
 
 // OpenAIFunctionCall represents the function part of a tool call
@@ -126,6 +135,7 @@ func CreateOpenAIStreamTransformer(model string) func(<-chan StreamChunk) <-chan
 			creationTime := time.Now().Unix()
 			firstChunk := true
 			var toolCallID *string
+			var toolCallIndex int
 			var usageData *UsageData
 
 			// Process each chunk
@@ -165,23 +175,28 @@ func CreateOpenAIStreamTransformer(model string) func(<-chan StreamChunk) <-chan
 					if funcCall, ok := toGeminiFunctionCall(chunk.Data); ok {
 						callID := fmt.Sprintf("call_%s", uuid.New().String())
 						if funcCall.ThoughtSignature != "" {
-							logger.Get().Info().Str("signature", funcCall.ThoughtSignature).Msg("Extracted thought_signature from Gemini, appending to ID")
-							callID = callID + "|" + funcCall.ThoughtSignature
+							logger.Get().Info().Str("signature", funcCall.ThoughtSignature).Msg("Extracted thought_signature from Gemini, storing in cache")
+							StoreThoughtSignature(callID, funcCall.ThoughtSignature)
 						}
 						toolCallID = &callID
 
 						argsJSON, _ := json.Marshal(funcCall.Args)
-						delta.ToolCalls = []OpenAIToolCall{
-							{
-								Index: 0,
-								ID:    callID,
+						newToolCall := OpenAIToolCall{
+							Index: toolCallIndex,
+							ID:    callID,
 								Type:  "function",
 								Function: OpenAIFunctionCall{
 									Name:      funcCall.Name,
 									Arguments: string(argsJSON),
 								},
-							},
+							}
+						if funcCall.ThoughtSignature != "" {
+							newToolCall.ExtraContent = &ToolCallExtraContent{
+								Google: &GoogleToolCallMetadata{ThoughtSignature: funcCall.ThoughtSignature},
+							}
 						}
+						delta.ToolCalls = []OpenAIToolCall{newToolCall}
+						toolCallIndex++
 
 						if firstChunk {
 							role := "assistant"
